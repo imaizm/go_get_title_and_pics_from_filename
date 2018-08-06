@@ -63,48 +63,14 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 		return
 	}
 
-	var searchResult *goScrapeDmmCoJp.SearchListItem
-	if len(searchResultList) == 1 {
-		searchResult = searchResultList[0]
-	} else {
-		for index, value := range searchResultList {
-			fmt.Println(strconv.Itoa(index) + " : " + value.Title)
-		}
-
-		indexFromScan := 0
-		scanComplete := false
-		for scanComplete == false {
-			var stdin string
-			fmt.Scan(&stdin)
-			input, err := strconv.Atoi(stdin)
-			if err != nil {
-				fmt.Println("is not number : " + stdin)
-			} else if input < 0 || input >= len(searchResultList) {
-				fmt.Println("is not between 0 and " + strconv.Itoa(len(searchResultList)-1) + " : " + stdin)
-			} else {
-				indexFromScan = input
-				scanComplete = true
-			}
-		}
-		searchResult = searchResultList[indexFromScan]
-	}
+	searchResult := selectFromSearchResultList(searchResultList)
 
 	fmt.Println(searchResult.Title)
 
-	result := goScrapeDmmCoJp.New(searchResult.ItemDetailURL)
+	itemInfo := goScrapeDmmCoJp.GetItemInfoFromURL(searchResult.ItemDetailURL)
+	newFileName := buildFilenameFromItemCodeAndItemInfo(itemCode, itemInfo)
 
-	fmt.Println("ItemCode : " + result.ItemCode)
-	fmt.Println("Title : " + result.Title)
-	fmt.Println("PackageImageThumbURL : " + result.PackageImageThumbURL)
-	fmt.Println("PackageImageURL : " + result.PackageImageURL)
-	fmt.Println("ActorList :")
-	for index, value := range result.ActorList {
-		fmt.Println("\t" + strconv.Itoa(index) + " : " + value.Name + " : " + value.ListPageURL)
-	}
-	fmt.Println("SampleImageList :")
-	for index, value := range result.SampleImageList {
-		fmt.Println("\t" + strconv.Itoa(index) + " : " + value.ImageThumbURL + " : " + value.ImageURL)
-	}
+	fmt.Println(newFileName)
 
 }
 
@@ -137,4 +103,51 @@ func getItemCodeFromFilename(fileName string) (string, error) {
 	}
 
 	return itemCode, nil
+}
+
+func selectFromSearchResultList(searchResultList []*goScrapeDmmCoJp.SearchListItem) *goScrapeDmmCoJp.SearchListItem {
+
+	if len(searchResultList) == 1 {
+		return searchResultList[0]
+	}
+
+	for index, value := range searchResultList {
+		fmt.Println(strconv.Itoa(index) + " : " + value.Title)
+	}
+
+	indexFromScan := 0
+	scanComplete := false
+	for scanComplete == false {
+		var stdin string
+		fmt.Scan(&stdin)
+		input, err := strconv.Atoi(stdin)
+		if err != nil {
+			fmt.Println("is not number : " + stdin)
+		} else if input < 0 || input >= len(searchResultList) {
+			fmt.Println("is not between 0 and " + strconv.Itoa(len(searchResultList)-1) + " : " + stdin)
+		} else {
+			indexFromScan = input
+			scanComplete = true
+		}
+	}
+	return searchResultList[indexFromScan]
+}
+
+func buildFilenameFromItemCodeAndItemInfo(itemCode string, itemInfo *goScrapeDmmCoJp.ItemOfDmmCoJp) string {
+	var filename string
+
+	filename = "[" + itemCode + "]" + itemInfo.Title
+	if len(itemInfo.ActorList) > 0 {
+		filename += " {"
+
+		actorNameList := []string{}
+		for _, value := range itemInfo.ActorList {
+			actorNameList = append(actorNameList, value.Name)
+		}
+		filename += strings.Join(actorNameList, ", ")
+
+		filename += "}"
+	}
+
+	return filename
 }
