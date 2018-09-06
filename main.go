@@ -4,7 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
+
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,6 +37,18 @@ func main() {
 	case mode.IsDir():
 		// do directory stuff
 		fmt.Println("directory")
+
+		files, err := ioutil.ReadDir(filePath)
+		if err != nil {
+			panic(err)
+		}
+
+		for index, file := range files {
+			fmt.Println("---> [" + strconv.Itoa(index+1) + "/" + strconv.Itoa(len(files)) + "]")
+			if file.IsDir() == false {
+				doGetTitleAndPics(filePath, file.Name())
+			}
+		}
 	case mode.IsRegular():
 		// do file stuff
 		fmt.Println("file")
@@ -47,6 +63,7 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 	fmt.Println(srcFileName)
 
 	if checkIgnoreFile(srcFileName) {
+		fmt.Println("skip")
 		return
 	}
 
@@ -68,13 +85,25 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 	fmt.Println(searchResult.Title)
 
 	itemInfo := goScrapeDmmCoJp.GetItemInfoFromURL(searchResult.ItemDetailURL)
-	newFileName := buildFilenameFromItemCodeAndItemInfo(itemCode, itemInfo)
+	newFileName := buildFileName(srcFileName, itemCode, itemInfo)
 
 	fmt.Println(newFileName)
 
+	downloadPackageImage(srcDir, newFileName, itemInfo)
+
+	err = os.Rename(
+		srcDir+string(os.PathSeparator)+srcFileName,
+		srcDir+string(os.PathSeparator)+newFileName)
+
+	if err != nil {
+		panic("rename fail")
+	}
 }
 
 func checkIgnoreFile(srcFileName string) bool {
+	if strings.HasPrefix(srcFileName, ".") {
+		return true
+	}
 	if strings.HasSuffix(srcFileName, ".crdownload") {
 		return true
 	}
@@ -113,6 +142,7 @@ func selectFromSearchResultList(searchResultList []*goScrapeDmmCoJp.SearchListIt
 
 	for index, value := range searchResultList {
 		fmt.Println(strconv.Itoa(index) + " : " + value.Title)
+		fmt.Println(value.ItemDetailURL)
 	}
 
 	indexFromScan := 0
@@ -133,21 +163,56 @@ func selectFromSearchResultList(searchResultList []*goScrapeDmmCoJp.SearchListIt
 	return searchResultList[indexFromScan]
 }
 
-func buildFilenameFromItemCodeAndItemInfo(itemCode string, itemInfo *goScrapeDmmCoJp.ItemOfDmmCoJp) string {
-	var filename string
+func buildFileName(srcFileName string, itemCode string, itemInfo *goScrapeDmmCoJp.ItemOfDmmCoJp) string {
+	var newFileName string
 
-	filename = "[" + itemCode + "]" + itemInfo.Title
+	newFileName = "[" + strings.ToUpper(itemCode) + "]" + itemInfo.Title
 	if len(itemInfo.ActorList) > 0 {
-		filename += " {"
+		newFileName += " {"
 
 		actorNameList := []string{}
 		for _, value := range itemInfo.ActorList {
 			actorNameList = append(actorNameList, value.Name)
 		}
-		filename += strings.Join(actorNameList, ", ")
+		newFileName += strings.Join(actorNameList, ", ")
 
-		filename += "}"
+		newFileName += "}"
+		newFileName += strings.TrimLeft(srcFileName, itemCode)
 	}
 
-	return filename
+	return newFileName
+}
+
+func downloadPackageImage(srcDir string, newFileName string, itemInfo *goScrapeDmmCoJp.ItemOfDmmCoJp) {
+	response, err := http.Get(itemInfo.PackageImageURL)
+	if err != nil {
+		fmt.Println(err)
+		panic("package image download err in get")
+	}
+
+	fmt.Println("status:", response.Status)
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println(err)
+		panic("package image download err in read")
+	}
+
+	downloadFileName := srcDir
+	downloadFileName += string(os.PathSeparator)
+	downloadFileName += strings.TrimRight(newFileName, filepath.Ext(newFileName))
+	downloadFileName += ".jpg"
+
+	file, err := os.OpenFile(downloadFileName, os.O_CREATE|os.O_WRONLY, 0666)
+
+	if err != nil {
+		fmt.Println(err)
+		panic("output file ")
+	}
+
+	defer func() {
+		file.Close()
+	}()
+
+	file.Write(body)
 }
