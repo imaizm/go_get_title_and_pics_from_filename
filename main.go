@@ -20,6 +20,7 @@ func main() {
 
 	var filePath string
 
+	// 引数チェック
 	flag.Parse()
 	if flag.NArg() == 1 {
 		filePath = flag.Arg(0)
@@ -27,31 +28,44 @@ func main() {
 		panic("invalid args")
 	}
 
+	// ファイルの存在チェック
 	fileInfo, err := os.Stat(filePath)
 
 	if os.IsNotExist(err) {
 		panic("input file or directory path does not exists.")
 	}
 
+	// ディレクトリ指定かファイル指定か
 	switch mode := fileInfo.Mode(); {
+	// ディレクトリ指定の場合
 	case mode.IsDir():
-		// do directory stuff
-		fmt.Println("directory")
 
+		// ディレクトリ内のファイル読み取り
 		files, err := ioutil.ReadDir(filePath)
 		if err != nil {
 			panic(err)
 		}
 
+		// 対象外ファイルを除去
+		var targetFiles []os.FileInfo
 		for index, file := range files {
-			fmt.Println("---> [" + strconv.Itoa(index+1) + "/" + strconv.Itoa(len(files)) + "]")
+			if checkIgnoreFile(file.Name()) {
+				fmt.Println("skip (" + strconv.Itoa(index+1) + ") : " + file.Name())
+			} else {
+				fmt.Println("ok (" + strconv.Itoa(index+1) + ") : " + file.Name())
+				targetFiles = append(targetFiles, file)
+			}
+		}
+
+		// 対象ファイル群に対しdoGetTitleAndPicsを実行
+		for index, file := range targetFiles {
+			fmt.Println("---> [" + strconv.Itoa(index+1) + "/" + strconv.Itoa(len(targetFiles)) + "]")
 			if file.IsDir() == false {
 				doGetTitleAndPics(filePath, file.Name())
 			}
 		}
+	// ファイル指定の場合
 	case mode.IsRegular():
-		// do file stuff
-		fmt.Println("file")
 		srcFile := fileInfo.Name()
 		srcDir := strings.TrimRight(filePath, srcFile)
 		doGetTitleAndPics(srcDir, srcFile)
@@ -62,6 +76,7 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 	fmt.Println(srcDir)
 	fmt.Println(srcFileName)
 
+	// 対象外ファイルチェック
 	if checkIgnoreFile(srcFileName) {
 		fmt.Println("skip")
 		return
@@ -69,11 +84,13 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 
 	//newFileName := srcFileName
 
+	// ファイル名から商品コードの取得
 	itemCode, err := getItemCodeFromFilename(srcFileName)
 	if err != nil {
 		panic(err)
 	}
 
+	// 商品コードで検索
 	searchResultList := goScrapeDmmCoJp.Search(itemCode)
 	if len(searchResultList) == 0 {
 		fmt.Println("item not found at dmm.co.jp")
@@ -85,6 +102,12 @@ func doGetTitleAndPics(srcDir string, srcFileName string) {
 	fmt.Println(searchResult.Title)
 
 	itemInfo := goScrapeDmmCoJp.GetItemInfoFromURL(searchResult.ItemDetailURL)
+	fmt.Println("-----")
+	fmt.Println(itemInfo.ItemCode)
+	fmt.Println(itemInfo.Title)
+	fmt.Println(itemInfo.PackageImageThumbURL)
+	fmt.Println(itemInfo.PackageImageURL)
+	fmt.Println("-----")
 	newFileName := buildFileName(srcFileName, itemCode, itemInfo)
 
 	fmt.Println(newFileName)
